@@ -1,0 +1,226 @@
+#!/bin/bash
+
+# CONFIG: MAIL PREFERENCES
+EMAIL="faiz.visram@gmail.com"	# Where to send mail notifications
+
+# CONFIG: WARNING LEVELS
+WARNING_TEMP[1]=50		# CPU temperature warning in degrees celcius
+WARNING_TEMP[0]=70		# CPU temperature danger level in degrees celcius
+WARNING_DISK_SPACE=5000	# remaining disk space warning in MB
+WARNING_FREE_RAM=5	# remaining RAM warning in percentage
+
+# CONFIG: PINS
+LED_PIN=7	# the GPIO pin number that the LED is connected to
+
+# CONFIG: LED BLINK RATE
+LED_ON_TIME=1	# time to keep the LED on in seconds (float)
+LED_OFF_TIME=1	# time between LED flashes
+LED_PAUSE_TIME=2	# time between LED notification flashes
+LED_CYCLE_DELAY=1	# time to wait between health check cycles
+
+# CONFIG: LOGGING
+LOG_FILE="/home/pi/bin/log.notifier"	# log location; change to "/dev/null" to disable
+TAG_WARNING[1]="[ WARNING ]"	# tag for normal warnings in logs
+TAG_WARNING[0]="[ DANGER ]"	# tag for danger warnings in logs
+
+# CONSTANTS: DIRECTORIES
+TEMP_FILE='/sys/class/thermal/thermal_zone0/temp'	# file that contains the CPU temperature
+GPIO_ROOT='/sys/class/gpio'	# root directory for GPIO operations
+GPIO_EXPORT="${GPIO_ROOT}/export"	# GPIO export path
+
+# CONSTANTS: GPIO VALUES
+ON=1	# ON constant
+OFF=0	# OFF constant
+
+# VERSION
+VERSION='Notifier v0.1'
+
+# USAGE
+USAGE='Usage: notifier [OPTIONS]
+	-h, --help		Show this help.
+	-m, --mail		Mail log messages to default address set as $EMAIL.
+	-s, --standalone	Run as a standalone script.
+	-v, --verbose		Print verbose messages.
+	-V, --version		Print version information and exit.
+'
+
+# Initialize the GPIO(s) if needed
+function init_gpio()
+{
+	# Check if the pin's GPIO directory already exists, otherwise export it
+	if [ ! -d "${GPIO_ROOT}/gpio${LED_PIN}" ]; then
+		if [ $verbose ]; then
+			echo "Exporting pin #$1"
+		fi
+
+		echo $LED_PIN > $GPIO_EXPORT
+		echo "out" > "${GPIO_ROOT}/gpio${LED_PIN}/direction"
+	fi
+}
+
+# Write a value to a GPIO pin
+# $1 	Pin to write value to.
+# $2 	Value to output to pin.
+function gpio_out() {
+	if [ $verbose ]; then
+		echo "Writing $2 to pin #$1"
+	fi
+
+	echo $2 > "${GPIO_ROOT}/gpio${1}/value"
+}
+
+# Flash the LED on $led_pin
+# $1 	Number of times to flash the LED.
+# $2 	Optional. Log message.
+function flash_led() {
+	if [ $verbose ]; then
+		echo "Flash LED $1x: $2"
+	fi
+
+	for (( i=1; i <= $1; i++ ))
+	do
+		# Flash the LED for 0.15 seconds
+		gpio_out $LED_PIN $ON
+		sleep $LED_ON_TIME
+		gpio_out $LED_PIN $OFF
+		sleep $LED_OFF_TIME
+	done
+
+	if [ "$2" ]; then
+		message="`date`\t$2"
+
+		echo -e $message >> $LOG_FILE
+
+		if [ $mail ]; then
+			if [ $verbose ]; then
+				echo "Mail warning"
+			fi
+
+			echo -e $message | mail -s "`hostname` Warning" $EMAIL
+		fi
+	fi
+
+	sleep $LED_PAUSE_TIME
+}
+
+function check_levels() {
+	if [ $verbose ]; then
+		echo "Checking levels"
+	fi
+
+	check_temp
+	check_disk
+	check_ram
+}
+
+function check_temp() {
+	if [ $verbose ]; then
+		echo "Checking CPU temperature"
+	fi
+
+	temp=`cat $TEMP_FILE`
+	warning_temp=$[WARNING_TEMP[1]*1000]
+
+	if [ $temp -gt $warning_temp ];	then
+		flash_led 1 "${TAG_WARNING[1]} CPU temperature: $(awk -v t=$temp 'BEGIN { print (t / 1000) }') oC"
+	fi
+}
+
+function check_disk() {
+	if [ $verbose ]; then
+		echo "Checking disk space"
+	fi
+
+	# get current disk space
+	disk_space=`df -m | grep rootfs | awk '{ print $4 }'`
+
+	# flash the LED if the disk space is below the warning level
+	if [ $disk_space -lt $WARNING_DISK_SPACE ]; then
+		flash_led 2 "${TAG_WARNING[1]} Free disk space: $disk_space"
+	fi
+}
+
+# Get free RAM percentage
+function check_ram() {
+	if [ $verbose ]; then
+		echo "Checking RAM"
+	fi
+
+	# get memory usage
+	total_mem=`free -ot | awk ' END { print $2 } '`
+	free_mem=`free -ot | awk ' END { print $4 } '`
+
+	# calculate memory usage in percentages
+	free_ram=$(awk -v f=$free_mem -v t=$total_mem 'BEGIN { print (f / t * 100) }')
+
+	if [ ${free_ram/.*} -le $WARNING_FREE_RAM ]; then
+		flash_led 3 "${TAG_WARNING[1]} RAM Remaining: ${free_ram}%"
+	fi
+}
+
+# Initialize the GPIO and prepare variables
+function init() {
+	if [ $verbose ]; then
+		echo "Initializing"
+	fi
+	init_gpio
+}
+
+if [ $verbose ]; then
+	echo "Checking options"
+fi
+
+while [ $# -gt 0 ]
+do
+	case $1 in
+		-m|--mail)
+			# mail log messages
+			$mail=1
+			;;
+		-h|--help)
+			# print usage and exit
+			echo $USAGE
+			exit 0;
+			;;
+		-s|--standalone)
+			# run as standalone; run in infinite loop
+			loop=1
+			;;
+		-v|--verbose)
+			verbose=1
+			;;
+		-V|--version)
+			# print version and exit
+			echo $VERSION
+			exit 0
+			;;
+		*)
+			# unknown option; exit
+			echo "Unknown argument: $1"
+			echo $USAGE
+			exit 1
+			;;
+	esac
+	shift
+done
+
+if [ $verbose ]; then
+	echo "Done."
+fi
+
+# initialize
+init
+
+if [ $loop ]; then
+	# run script in an infinite loop
+	while true;
+	do
+		check_levels
+		# sleep for 1 second
+		sleep $LED_CYCLE_DELAY
+	done
+else
+	check_levels
+fi
+
+exit 0;
