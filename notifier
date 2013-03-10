@@ -132,6 +132,8 @@ function check_levels() {
 	if [ $WARNING_INTERNET_PULSE -gt 0 ]; then
 		check_internet
 	fi
+
+	send_log
 }
 
 function check_temp() {
@@ -185,8 +187,8 @@ function check_network() {
 		echo "Checking network connection"
 	fi
 
-	# TODO test for network connection
-	if (( $WARNING_NETWORK_PULSE < 0 )) # DUMMY CHECK; REPLACE ASAP
+	# check if system has any IP other than the loopback IP
+	if ! ip addr | grep inet | grep -v "127.0.0.1" > /dev/null; then
 		flash_led $WARNING_NETWORK_PULSE "${TAG_WARNING[1]} No network connection"
 	fi
 }

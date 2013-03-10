@@ -13,7 +13,8 @@ Features
 	* high CPU temperatures
 	* low disk space
 	* low RAM
+	* no network connection
+	* no Internet connection
 * Doesn't depend on other packages; supports the standard /sys/class/gpio driver
 
-_Tested to work with Raspbian Wheezy._
-
+_Tested to work with Raspbian Wheezy found here: http://www.raspberrypi.org/downloads_
