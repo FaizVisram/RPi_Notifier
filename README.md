@@ -15,5 +15,5 @@ Features
 	* low RAM
 * Doesn't depend on other packages; supports the standard /sys/class/gpio driver
 
-Tested to work with Raspbian Wheezy.
+_Tested to work with Raspbian Wheezy._
 

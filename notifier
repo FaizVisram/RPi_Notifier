@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # CONFIG: MAIL PREFERENCES
-EMAIL="faiz.visram@gmail.com"	# Where to send mail notifications
+EMAIL="${USER}@${HOSTNAME}"	# Where to send mail notifications
 
 # CONFIG: WARNING LEVELS
 WARNING_TEMP[1]=50		# CPU temperature warning in degrees celcius
@@ -9,8 +9,15 @@ WARNING_TEMP[0]=70		# CPU temperature danger level in degrees celcius
 WARNING_DISK_SPACE=5000	# remaining disk space warning in MB
 WARNING_FREE_RAM=5	# remaining RAM warning in percentage
 
+# CONFIG: LED PULSES	# Number of times to flash the LED, 0 to disable
+WARNING_TEMP_PULSE=1
+WARNING_DISK_PULSE=1
+WARNING_RAM_PULSE=1
+WARNING_NETWORK_PULSE=1
+WARNING_INTERNET_PULSE=1
+
 # CONFIG: PINS
-LED_PIN=7	# the GPIO pin number that the LED is connected to
+LED_PIN=( 7 )	# the GPIO numbers corresponding to the pins with LEDS
 
 # CONFIG: LED BLINK RATE
 LED_ON_TIME=1	# time to keep the LED on in seconds (float)
@@ -47,15 +54,18 @@ USAGE='Usage: notifier [OPTIONS]
 # Initialize the GPIO(s) if needed
 function init_gpio()
 {
-	# Check if the pin's GPIO directory already exists, otherwise export it
-	if [ ! -d "${GPIO_ROOT}/gpio${LED_PIN}" ]; then
-		if [ $verbose ]; then
-			echo "Exporting pin #$1"
-		fi
+	for pin in ${LED_PIN[@]}
+	do
+		# Check if the pin's GPIO directory already exists, otherwise export it
+		if [ ! -d "${GPIO_ROOT}/gpio${pin}" ]; then
+			if [ $verbose ]; then
+				echo "Exporting pin #$pin"
+			fi
 
-		echo $LED_PIN > $GPIO_EXPORT
-		echo "out" > "${GPIO_ROOT}/gpio${LED_PIN}/direction"
-	fi
+			echo $pin > $GPIO_EXPORT
+			echo "out" > "${GPIO_ROOT}/gpio${pin}/direction"
+		fi
+	done
 }
 
 # Write a value to a GPIO pin
@@ -73,31 +83,26 @@ function gpio_out() {
 # $1 	Number of times to flash the LED.
 # $2 	Optional. Log message.
 function flash_led() {
+	init_gpio	# about to use GPIO, initialize if needed
+
 	if [ $verbose ]; then
 		echo "Flash LED $1x: $2"
 	fi
 
 	for (( i=1; i <= $1; i++ ))
 	do
-		# Flash the LED for 0.15 seconds
-		gpio_out $LED_PIN $ON
-		sleep $LED_ON_TIME
-		gpio_out $LED_PIN $OFF
-		sleep $LED_OFF_TIME
+		for pin in ${LED_PIN[@]}
+		do
+			# Flash the LED for 0.15 seconds
+			gpio_out $pin $ON
+			sleep $LED_ON_TIME
+			gpio_out $pin $OFF
+			sleep $LED_OFF_TIME
+		done
 	done
 
 	if [ "$2" ]; then
-		message="`date`\t$2"
-
-		echo -e $message >> $LOG_FILE
-
-		if [ $mail ]; then
-			if [ $verbose ]; then
-				echo "Mail warning"
-			fi
-
-			echo -e $message | mail -s "`hostname` Warning" $EMAIL
-		fi
+		log $2
 	fi
 
 	sleep $LED_PAUSE_TIME
@@ -108,9 +113,25 @@ function check_levels() {
 		echo "Checking levels"
 	fi
 
-	check_temp
-	check_disk
-	check_ram
+	if [ $WARNING_TEMP_PULSE -gt 0 ]; then
+		check_temp
+	fi
+
+	if [ $WARNING_DISK_PULSE -gt 0 ]; then
+		check_disk
+	fi
+
+	if [ $WARNING_RAM_PULSE -gt 0 ]; then
+		check_ram
+	fi
+
+	if [ $WARNING_NETWORK_PULSE -gt 0 ]; then
+		check_network
+	fi
+
+	if [ $WARNING_INTERNET_PULSE -gt 0 ]; then
+		check_internet
+	fi
 }
 
 function check_temp() {
@@ -122,7 +143,7 @@ function check_temp() {
 	warning_temp=$[WARNING_TEMP[1]*1000]
 
 	if [ $temp -gt $warning_temp ];	then
-		flash_led 1 "${TAG_WARNING[1]} CPU temperature: $(awk -v t=$temp 'BEGIN { print (t / 1000) }') oC"
+		flash_led $WARNING_TEMP_PULSE "${TAG_WARNING[1]} CPU temperature: $(awk -v t=$temp 'BEGIN { print (t / 1000) }') oC"
 	fi
 }
 
@@ -136,7 +157,7 @@ function check_disk() {
 
 	# flash the LED if the disk space is below the warning level
 	if [ $disk_space -lt $WARNING_DISK_SPACE ]; then
-		flash_led 2 "${TAG_WARNING[1]} Free disk space: $disk_space"
+		flash_led $WARNING_DISK_PULSE "${TAG_WARNING[1]} Free disk space: $disk_space"
 	fi
 }
 
@@ -154,7 +175,46 @@ function check_ram() {
 	free_ram=$(awk -v f=$free_mem -v t=$total_mem 'BEGIN { print (f / t * 100) }')
 
 	if [ ${free_ram/.*} -le $WARNING_FREE_RAM ]; then
-		flash_led 3 "${TAG_WARNING[1]} RAM Remaining: ${free_ram}%"
+		flash_led $WARNING_RAM_PULSE "${TAG_WARNING[1]} RAM Remaining: ${free_ram}%"
+	fi
+}
+
+# Check for a network connection
+function check_network() {
+	if [ $verbose ]; then
+		echo "Checking network connection"
+	fi
+
+	# TODO test for network connection
+	if (( $WARNING_NETWORK_PULSE < 0 )) # DUMMY CHECK; REPLACE ASAP
+		flash_led $WARNING_NETWORK_PULSE "${TAG_WARNING[1]} No network connection"
+	fi
+}
+
+# Check for an Internet connection
+function check_internet() {
+	if [ $verbose ]; then
+		echo "Checking Internet Connection"
+	fi
+
+	if ! ping -c 1 google.com > /dev/null; then
+		flash_led 1 "${TAG_WARNING[1]} No Internet connection."
+	fi
+}
+
+function log() {
+	msg="`date`\t$1"
+	echo -e $msg >> $LOG_FILE
+	$log = "${log}$msg\n"
+}
+
+function send_log() {
+	if [ $mail ]; then
+		if [ $verbose ]; then
+			echo "Mail warning"
+		fi
+
+		echo -e $message | mail -s "`hostname` Warning" $EMAIL
 	fi
 }
 
@@ -163,6 +223,7 @@ function init() {
 	if [ $verbose ]; then
 		echo "Initializing"
 	fi
+
 	init_gpio
 }
 
@@ -179,7 +240,7 @@ do
 			;;
 		-h|--help)
 			# print usage and exit
-			echo $USAGE
+			echo "$USAGE"
 			exit 0;
 			;;
 		-s|--standalone)
@@ -191,13 +252,13 @@ do
 			;;
 		-V|--version)
 			# print version and exit
-			echo $VERSION
+			echo "$VERSION"
 			exit 0
 			;;
 		*)
 			# unknown option; exit
 			echo "Unknown argument: $1"
-			echo $USAGE
+			echo "$USAGE"
 			exit 1
 			;;
 	esac
@@ -207,9 +268,6 @@ done
 if [ $verbose ]; then
 	echo "Done."
 fi
-
-# initialize
-init
 
 if [ $loop ]; then
 	# run script in an infinite loop
