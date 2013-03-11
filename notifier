@@ -88,7 +88,18 @@ USAGE='Usage: notifier [OPTIONS]
 	-V, --version		Print version information and exit.
 '
 
-# Initialize the GPIO(s) if needed
+# Initialize all needed GPIO pins
+function init_gpio() {
+	if [ $ENABLE_LED_NOTIFICATION ]; then
+		init_led_gpio	
+	fi
+
+	if [ $ENABLE_BUZZER_NOTIFICATION ]; then
+		init_buzzer_gpio
+	fi
+}
+
+# Initialize the GPIO(s) for LEDs if needed
 function init_gpio()
 {
 	for pin in ${LED_PIN[@]}
@@ -104,6 +115,23 @@ function init_gpio()
 		fi
 	done
 }
+
+function init_buzzer_gpio()
+{
+	for pin in ${BUZZER_PIN[@]}
+	do
+		# Check if the pin's GPIO directory already exists, otherwise export it
+		if [ ! -d "${GPIO_ROOT}/gpio${pin}" ]; then
+			if [ $verbose ]; then
+				echo "Exporting pin #$pin"
+			fi
+
+			echo $pin > $GPIO_EXPORT
+			echo "out" > "${GPIO_ROOT}/gpio${pin}/direction"
+		fi
+	done
+}
+
 
 # Write a value to a GPIO pin
 # $1 	Pin to write value to.
@@ -147,7 +175,7 @@ function pulse() {
 # $1 	Number of times to flash the LED.
 # $2 	Optional. Log message.
 function flash_led() {
-	init_gpio	# about to use GPIO, initialize if needed
+	init_led_gpio	# about to use GPIO, initialize if needed
 
 	if [ $verbose ]; then
 		echo "Flash LED $1x: $2"
@@ -176,7 +204,7 @@ function flash_led() {
 # Pulse an audible notification through a speaker.
 # $1	Number of buzzes to play.
 function buzz_speaker() {
-	init_gpio	# about to use GPIO, initialize if needed
+	init_buzzer_gpio	# about to use GPIO, initialize if needed
 
 	if [ $verbose ]; then
 		echo "Buzz speaker $1x"
@@ -317,7 +345,13 @@ function init() {
 		echo "Initializing"
 	fi
 
+	load_config
 	init_gpio
+}
+
+# Load any available configuration files.
+function load_config() {
+	# TODO load config files
 }
 
 if [ $verbose ]; then
