@@ -207,7 +207,7 @@ function check_internet() {
 function log() {
 	msg="`date`\t$1"
 	echo -e $msg >> $LOG_FILE
-	$log = "${log}$msg\n"
+	$log="${log}$msg\n"
 }
 
 function send_log() {
