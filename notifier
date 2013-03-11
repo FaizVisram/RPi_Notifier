@@ -9,6 +9,10 @@ WARNING_TEMP[0]=70		# CPU temperature danger level in degrees celcius
 WARNING_DISK_SPACE=5000	# remaining disk space warning in MB
 WARNING_FREE_RAM=5	# remaining RAM warning in percentage
 
+# CONFIG: PULSE METHODS
+ENABLE_LED_NOTIFICATION=1	# Enable visual notifications via LEDs
+ENABLE_BUZZER_NOTIFICATION=1	# Enable audible notifications via buzzers
+
 # CONFIG: LED PULSES	# Number of times to flash the LED, 0 to disable
 WARNING_TEMP_PULSE=1
 WARNING_DISK_PULSE=1
@@ -18,12 +22,17 @@ WARNING_INTERNET_PULSE=1
 
 # CONFIG: PINS
 LED_PIN=( 7 )	# the GPIO numbers corresponding to the pins with LEDS
+BUZZER_PIN= ( )	# the GPIO numbers corresponding to the pins with buzzers
 
 # CONFIG: LED BLINK RATE
 LED_ON_TIME=1	# time to keep the LED on in seconds (float)
 LED_OFF_TIME=1	# time between LED flashes
 LED_PAUSE_TIME=2	# time between LED notification flashes
 LED_CYCLE_DELAY=1	# time to wait between health check cycles
+
+# CONFIG: SPEAKER BUZZ RATE
+BUZZER_ON_TIME=1	# time the speaker buzzes for
+BUZZER_OFF_TIME=1	# time between buzzes
 
 # CONFIG: LOGGING
 LOG_FILE="/home/pi/bin/log.notifier"	# log location; change to "/dev/null" to disable
@@ -99,6 +108,33 @@ function gpio_out() {
 	echo $2 > "${GPIO_ROOT}/gpio${1}/value"
 }
 
+# Notify the user via current configuration of methods.
+# $1	Number of notifications.
+# $2	Log message.
+function notify() {
+	if  (( $1 > 0 )); then
+		pulse $1
+	fi
+
+	if [ "$2" ]; then
+
+	log $2
+}
+
+# Send a visual or audible pulse according to the current configuration.
+# $1	Number of pulses.
+function pulse() {
+	if (( $1 > 0 )); then
+		if [ $ENABLE_LED_NOTIFICATION ]; then
+			flash_led $1
+		fi
+
+		if [ $ENABLE_BUZZER_NOTIFICATION ]; then
+			buzz_speaker $1
+		fi
+	fi
+}
+
 # Flash the LED on $led_pin
 # $1 	Number of times to flash the LED.
 # $2 	Optional. Log message.
@@ -121,11 +157,35 @@ function flash_led() {
 		done
 	done
 
+	# TODO, remove this when all direct calls from check functions have been removed
 	if [ "$2" ]; then
 		log $2
 	fi
 
 	sleep $LED_PAUSE_TIME
+}
+
+# Pulse an audible notification through a speaker.
+# $1	Number of buzzes to play.
+function buzz_speaker() {
+	init_gpio	# about to use GPIO, initialize if needed
+
+	if [ $verbose ]; then
+		echo "Buzz speaker $1x"
+	fi
+
+	for (( i=1; i <= $1; i++ ))
+	do
+		for pin in ${BUZZER_PIN[@]}
+		do
+			# Buzz the speaker
+			gpio_out $pin $ON
+			sleep $BUZZER_ON_TIME
+			gpio_out $pin $OFF
+			sleep $BUZZER_OFF_TIME
+		done
+	done
+
 }
 
 function check_levels() {
@@ -153,7 +213,8 @@ function check_levels() {
 		check_internet
 	fi
 
-	send_log
+	send_log	# mail the log
+	log=''	# clear the log
 }
 
 function check_temp() {
@@ -162,7 +223,7 @@ function check_temp() {
 	fi
 
 	temp=`cat $TEMP_FILE`
-	warning_temp=$[WARNING_TEMP[1]*1000]
+	warning_temp=$[ WARNING_TEMP[1]*1000 ]
 
 	if [ $temp -gt $warning_temp ];	then
 		flash_led $WARNING_TEMP_PULSE "${TAG_WARNING[1]} CPU temperature: $(awk -v t=$temp 'BEGIN { print (t / 1000) }') oC"
@@ -240,9 +301,6 @@ function send_log() {
 
 		echo -e $message | mail -s "`hostname` Warning" $EMAIL
 	fi
-
-	# clear the log
-	$log=''
 }
 
 # Initialize the GPIO and prepare variables
@@ -300,6 +358,22 @@ do
 		--no-check-temp)
 			# override global setting for check for CPU temperature
 			$WARNING_TEMP_PULSE=0
+			;;
+		--enable-led)
+			# override the config setting for LED notifications
+			$ENABLE_LED_NOTIFICATION=1
+			;;
+		--disable-led)
+			# override the config setting for LED notifications
+			$ENABLE_LED_NOTIFICATION=0
+			;;
+		--enable-buzzer)
+			# override the config setting for buzzer notifications
+			$ENABLE_BUZZER_NOTIFICATION=1
+			;;
+		--disable-buzzer)
+			# override the config setting for buzzer notifications
+			$ENABLE_BUZZER_NOTIFICATION=0
 			;;
 		-m|--mail)
 			# mail log messages
