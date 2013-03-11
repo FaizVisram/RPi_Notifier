@@ -210,14 +210,19 @@ function log() {
 	$log="${log}$msg\n"
 }
 
+# Mail the log in $log and clear it
 function send_log() {
-	if [ $mail ]; then
+	# if the log isn't empty and the mail option is on
+	if [ $log && $mail ]; then
 		if [ $verbose ]; then
 			echo "Mail warning"
 		fi
 
 		echo -e $message | mail -s "`hostname` Warning" $EMAIL
 	fi
+
+	# clear the log
+	$log=''
 }
 
 # Initialize the GPIO and prepare variables
