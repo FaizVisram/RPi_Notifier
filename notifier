@@ -73,6 +73,14 @@ USAGE='Usage: notifier [OPTIONS]
 				Override global setting in config.
 	--no-check-temp		Do not check for high CPU temperature.
 				Override global setting in config.
+	--enable-buzzer		Enable notifications via buzzers/speakers.
+				Override global setting in config.
+	--disable-buzzer	Disable notifications via buzzers/speakers.
+				Override global setting in config.
+	--enable-led		Enable notifications via LEDs.
+				Override global setting in config.
+	--disable-led		Disable notifications via LEDs.
+				Override global setting in config.
 	-h, --help		Show this help.
 	-m, --mail		Mail log messages to default address set as $EMAIL.
 	-s, --standalone	Run as a standalone script.
