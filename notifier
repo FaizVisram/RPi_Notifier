@@ -44,6 +44,26 @@ VERSION='Notifier v0.1'
 
 # USAGE
 USAGE='Usage: notifier [OPTIONS]
+	--check-disk		Check for low free disk space.
+				Override global setting in config.
+	--no-check-disk		Do not check for low free disk space.
+				Override global setting in config.
+	--check-internet	Check for an Internet connection.
+				Override global setting in config.
+	--no-check-internet	Do not check for an Internet connection.
+				Override global setting in config.
+	--check-network		Check for a network connection.
+				Override global setting in config.
+	--no-check-internet	Do not check for a network connection.
+				Override global setting in config.
+	--check-ram		Check for low free free RAM.
+				Override global setting in config.
+	--no-check-ram		Do not check for low free free RAM.
+				Override global setting in config.
+	--check-temp		Check for high CPU temperature.
+				Override global setting in config.
+	--no-check-temp		Do not check for high CPU temperature.
+				Override global setting in config.
 	-h, --help		Show this help.
 	-m, --mail		Mail log messages to default address set as $EMAIL.
 	-s, --standalone	Run as a standalone script.
@@ -241,6 +261,46 @@ fi
 while [ $# -gt 0 ]
 do
 	case $1 in
+		--check-disk)
+			# override global setting for check for disk space
+			$WARNING_DISK_PULSE=1
+			;;
+		--no-check-disk)
+			# override global setting for check for disk space
+			$WARNING_DISK_PULSE=0
+			;;
+		--check-internet)
+			# override global setting for check for Internet connection
+			$WARNING_INTERNET_PULSE=1
+			;;
+		--no-check-internet)
+			# override global setting for check for Internet connection
+			$WARNING_INTERNET_PULSE=0
+			;;
+		--check-network)
+			# override global setting for check for network connection
+			$WARNING_NETWORK_PULSE=1
+			;;
+		--no-check-network)
+			# override global setting for check for network connection
+			$WARNING_NETWORK_PULSE=0
+			;;
+		--check-ram)
+			# override global setting for check for free RAM
+			$WARNING_RAM_PULSE=1
+			;;
+		--no-check-ram)
+			# override global setting for check for free RAM
+			$WARNING_RAM_PULSE=0
+			;;
+		--check-temp)
+			# override global setting for check for CPU temperature
+			$WARNING_TEMP_PULSE=1
+			;;
+		--no-check-temp)
+			# override global setting for check for CPU temperature
+			$WARNING_TEMP_PULSE=0
+			;;
 		-m|--mail)
 			# mail log messages
 			$mail=1
