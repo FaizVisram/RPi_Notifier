@@ -13,24 +13,25 @@ WARNING_FREE_RAM=5	# remaining RAM warning in percentage
 ENABLE_LED_NOTIFICATION=1	# Enable visual notifications via LEDs
 ENABLE_BUZZER_NOTIFICATION=1	# Enable audible notifications via buzzers
 
-# CONFIG: LED PULSES	# Number of times to flash the LED, 0 to disable
+# CONFIG: PULSE NUMBERS	# Number of times to flash the LED, 0 to disable
 WARNING_TEMP_PULSE=1
 WARNING_DISK_PULSE=1
 WARNING_RAM_PULSE=1
 WARNING_NETWORK_PULSE=1
 WARNING_INTERNET_PULSE=1
 
-# CONFIG: PINS
+# CONFIG: GPIO PINS
 LED_PIN=( 7 )	# the GPIO numbers corresponding to the pins with LEDS
-BUZZER_PIN= ( )	# the GPIO numbers corresponding to the pins with buzzers
+BUZZER_PIN=( )	# the GPIO numbers corresponding to the pins with buzzers
 
-# CONFIG: LED BLINK RATE
+# CONFIG: TIMINGS
+SLEEP_TIME=1	# time to wait between health check cycles
+
+# CONFIG: LED RATES
 LED_ON_TIME=1	# time to keep the LED on in seconds (float)
 LED_OFF_TIME=1	# time between LED flashes
-LED_PAUSE_TIME=2	# time between LED notification flashes
-LED_CYCLE_DELAY=1	# time to wait between health check cycles
 
-# CONFIG: SPEAKER BUZZ RATE
+# CONFIG: BUZZ RATES
 BUZZER_ON_TIME=1	# time the speaker buzzes for
 BUZZER_OFF_TIME=1	# time between buzzes
 
@@ -198,7 +199,6 @@ function flash_led() {
 		log $2
 	fi
 
-	sleep $LED_PAUSE_TIME
 }
 
 # Pulse an audible notification through a speaker.
@@ -351,7 +351,15 @@ function init() {
 
 # Load any available configuration files.
 function load_config() {
-	# TODO load config files
+	# Load configuration file from /etc/notifier.cfg, if it's readable
+	if [ -r /etc/notifier.cfg ]; then
+		source /etc/notifier.cfg
+	fi
+
+	# Load configuration file from ~/.notifier, if it's readable
+	if [ -r ~/.notifier ]; then
+		source ~/.notifier
+	fi
 }
 
 if [ $verbose ]; then
@@ -458,7 +466,7 @@ if [ $loop ]; then
 	do
 		check_levels
 		# sleep for 1 second
-		sleep $LED_CYCLE_DELAY
+		sleep $SLEEP_TIME
 	done
 else
 	check_levels
