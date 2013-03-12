@@ -92,7 +92,7 @@ USAGE='Usage: notifier [OPTIONS]
 # Initialize all needed GPIO pins
 function init_gpio() {
 	if [ $ENABLE_LED_NOTIFICATION ]; then
-		init_led_gpio	
+		init_led_gpio
 	fi
 
 	if [ $ENABLE_BUZZER_NOTIFICATION ]; then
@@ -101,7 +101,7 @@ function init_gpio() {
 }
 
 # Initialize the GPIO(s) for LEDs if needed
-function init_gpio()
+function init_led_gpio()
 {
 	for pin in ${LED_PIN[@]}
 	do
@@ -324,7 +324,7 @@ function check_internet() {
 function log() {
 	msg="`date`\t$1"
 	echo -e $msg >> $LOG_FILE
-	$log="${log}$msg\n"
+	log="${log}$msg\n"
 }
 
 # Mail the log in $log and clear it
