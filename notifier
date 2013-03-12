@@ -154,8 +154,8 @@ function notify() {
 	fi
 
 	if [ "$2" ]; then
-
-	log $2
+		log $2
+	fi
 }
 
 # Send a visual or audible pulse according to the current configuration.
@@ -330,7 +330,7 @@ function log() {
 # Mail the log in $log and clear it
 function send_log() {
 	# if the log isn't empty and the mail option is on
-	if [ $log && $mail ]; then
+	if [ [ $log ] && [ $mail ] ]; then
 		if [ $verbose ]; then
 			echo "Mail warning"
 		fi
