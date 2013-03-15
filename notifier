@@ -3,15 +3,11 @@
 # CONFIG: MAIL PREFERENCES
 EMAIL="${USER}@${HOSTNAME}"	# Where to send mail notifications
 
-# CONFIG: WARNING LEVELS
-WARNING_TEMP[1]=50		# CPU temperature warning in degrees celcius
-WARNING_TEMP[0]=70		# CPU temperature danger level in degrees celcius
-WARNING_DISK_SPACE=5000	# remaining disk space warning in MB
-WARNING_FREE_RAM=5	# remaining RAM warning in percentage
-
-# CONFIG: PULSE METHODS
-ENABLE_LED_NOTIFICATION=1	# Enable visual notifications via LEDs
-ENABLE_BUZZER_NOTIFICATION=1	# Enable audible notifications via buzzers
+# CONFIG: WARNING LEVELS	# Threshold levels to start warning for
+				# includes support of multiple space-separated values ordered by increasing severity
+WARNING_TEMP=( 50 70 )	# CPU temperature warning in degrees celcius
+WARNING_DISK_SPACE=( 5000 2000 1000 )	# remaining disk space warning in MB
+WARNING_FREE_RAM=( 5 )	# remaining RAM warning in percentage
 
 # CONFIG: PULSE NUMBERS	# Number of times to flash the LED, 0 to disable
 WARNING_TEMP_PULSE=1
@@ -19,6 +15,10 @@ WARNING_DISK_PULSE=1
 WARNING_RAM_PULSE=1
 WARNING_NETWORK_PULSE=1
 WARNING_INTERNET_PULSE=1
+
+# CONFIG: PULSE METHODS
+ENABLE_LED_NOTIFICATION=1	# Enable visual notifications via LEDs
+ENABLE_BUZZER_NOTIFICATION=1	# Enable audible notifications via buzzers
 
 # CONFIG: GPIO PINS
 LED_PIN=( 7 )	# the GPIO numbers corresponding to the pins with LEDS
@@ -37,8 +37,7 @@ BUZZER_OFF_TIME=1	# time between buzzes
 
 # CONFIG: LOGGING
 LOG_FILE="/home/pi/bin/log.notifier"	# log location; change to "/dev/null" to disable
-TAG_WARNING[1]="[ WARNING ]"	# tag for normal warnings in logs
-TAG_WARNING[0]="[ DANGER ]"	# tag for danger warnings in logs
+TAG_WARNING="[ WARNING ]"	# tag for warnings in logs
 
 # CONSTANTS: DIRECTORIES
 TEMP_FILE='/sys/class/thermal/thermal_zone0/temp'	# file that contains the CPU temperature
@@ -54,6 +53,7 @@ VERSION='Notifier v0.1'
 
 # USAGE
 USAGE='Usage: notifier [OPTIONS]
+
 	--check-disk		Check for low free disk space.
 				Override global setting in config.
 	--no-check-disk		Do not check for low free disk space.
@@ -100,9 +100,8 @@ function init_gpio() {
 	fi
 }
 
-# Initialize the GPIO(s) for LEDs if needed
-function init_led_gpio()
-{
+# Initialize the GPIO pin(s) for LEDs if needed
+function init_led_gpio() {
 	for pin in ${LED_PIN[@]}
 	do
 		# Check if the pin's GPIO directory already exists, otherwise export it
@@ -117,8 +116,8 @@ function init_led_gpio()
 	done
 }
 
-function init_buzzer_gpio()
-{
+# Initialize the GPIO pin(s) for buzzers if needed
+function init_buzzer_gpio() {
 	for pin in ${BUZZER_PIN[@]}
 	do
 		# Check if the pin's GPIO directory already exists, otherwise export it
@@ -148,18 +147,20 @@ function gpio_out() {
 # Notify the user via current configuration of methods.
 # $1	Number of notifications.
 # $2	Log message.
+# $3	Optional. Intensity of notification.
 function notify() {
 	if  (( $1 > 0 )); then
 		pulse $1
 	fi
 
 	if [ "$2" ]; then
-		log $2
+		log "$2"
 	fi
 }
 
 # Send a visual or audible pulse according to the current configuration.
 # $1	Number of pulses.
+# $2	Optional. Intensity of pulse.
 function pulse() {
 	if (( $1 > 0 )); then
 		if [ $ENABLE_LED_NOTIFICATION ]; then
@@ -196,7 +197,7 @@ function flash_led() {
 
 	# TODO, remove this when all direct calls from check functions have been removed
 	if [ "$2" ]; then
-		log $2
+		log "$2"
 	fi
 
 }
@@ -259,10 +260,20 @@ function check_temp() {
 	fi
 
 	temp=`cat $TEMP_FILE`
-	warning_temp=$[ WARNING_TEMP[1]*1000 ]
 
-	if [ $temp -gt $warning_temp ];	then
-		flash_led $WARNING_TEMP_PULSE "${TAG_WARNING[1]} CPU temperature: $(awk -v t=$temp 'BEGIN { print (t / 1000) }') oC"
+	for (( i=0; i < ${#WARNING_TEMP[@]}; i++ ))
+	do
+		warning_temp=$[ WARNING_TEMP[i]*1000 ]
+
+		if (( temp > warning_temp )); then
+			intensity=$(( i + 1 ))
+		else
+			break
+		fi
+	done
+
+	if (( $intensity > 0 )); then
+		notify $WARNING_TEMP_PULSE "${TAG_WARNING} CPU temperature: $(awk -v t=$temp 'BEGIN { print (t / 1000) }') oC" $intensity
 	fi
 }
 
@@ -274,9 +285,16 @@ function check_disk() {
 	# get current disk space
 	disk_space=`df -m | grep rootfs | awk '{ print $4 }'`
 
-	# flash the LED if the disk space is below the warning level
-	if [ $disk_space -lt $WARNING_DISK_SPACE ]; then
-		flash_led $WARNING_DISK_PULSE "${TAG_WARNING[1]} Free disk space: $disk_space"
+	for (( i=0; i < ${#WARNING_DISK_SPACE[@]}; i++ ))
+	do
+		if (( $disk_space < ${WARNING_DISK_SPACE[i]} )); then
+			intensity=$(( i + 1 ))
+		fi
+	done
+
+	# notify if the disk space is below a warning level
+	if (( $intensity > 0 )); then
+		notify $WARNING_DISK_PULSE "${TAG_WARNING[1]} Free disk space: $disk_space" $intensity
 	fi
 }
 
@@ -293,8 +311,15 @@ function check_ram() {
 	# calculate memory usage in percentages
 	free_ram=$(awk -v f=$free_mem -v t=$total_mem 'BEGIN { print (f / t * 100) }')
 
-	if [ ${free_ram/.*} -le $WARNING_FREE_RAM ]; then
-		flash_led $WARNING_RAM_PULSE "${TAG_WARNING[1]} RAM Remaining: ${free_ram}%"
+	for (( i=1; i < ${#WARNING_FREE_RAM[@]}; i++ ))
+	do
+		if (( ${free_ram/.*} < ${WARNING_FREE_RAM[i]} )); then
+			intensity=(( i + 1 ))
+		fi
+	done
+
+	if (( $intensity > 0 )); then
+		notify $WARNING_RAM_PULSE "${TAG_WARNING[1]} RAM Remaining: ${free_ram}%"
 	fi
 }
 
@@ -306,7 +331,7 @@ function check_network() {
 
 	# check if system has any IP other than the loopback IP
 	if ! ip addr | grep inet | grep -v "127.0.0.1" > /dev/null; then
-		flash_led $WARNING_NETWORK_PULSE "${TAG_WARNING[1]} No network connection"
+		notify $WARNING_NETWORK_PULSE "${TAG_WARNING[1]} No network connection"
 	fi
 }
 
@@ -316,11 +341,13 @@ function check_internet() {
 		echo "Checking Internet Connection"
 	fi
 
-	if ! ping -c 1 google.com > /dev/null; then
-		flash_led 1 "${TAG_WARNING[1]} No Internet connection."
+	if ! ping -c 1 google.com > /dev/null 2>&1; then
+		notify $WARNING_INTERNET_PULSE "${TAG_WARNING[1]} No Internet connection."
 	fi
 }
 
+# Add a message to the log.
+# $1	The message to send to the log.
 function log() {
 	msg="`date`\t$1"
 	echo -e $msg >> $LOG_FILE
@@ -330,7 +357,7 @@ function log() {
 # Mail the log in $log and clear it
 function send_log() {
 	# if the log isn't empty and the mail option is on
-	if [ [ $log ] && [ $mail ] ]; then
+	if [[ $log && $mail ]]; then
 		if [ $verbose ]; then
 			echo "Mail warning"
 		fi
@@ -361,6 +388,8 @@ function load_config() {
 		source ~/.notifier
 	fi
 }
+
+# ----- MAIN -----
 
 if [ $verbose ]; then
 	echo "Checking options"
