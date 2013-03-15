@@ -261,6 +261,9 @@ function check_temp() {
 
 	temp=`cat $TEMP_FILE`
 
+	intensity=0	# the intensity of the pulse determined
+			# by the severity of the warning
+
 	for (( i=0; i < ${#WARNING_TEMP[@]}; i++ ))
 	do
 		warning_temp=$[ WARNING_TEMP[i]*1000 ]
@@ -284,6 +287,9 @@ function check_disk() {
 
 	# get current disk space
 	disk_space=`df -m | grep rootfs | awk '{ print $4 }'`
+
+	intensity=0	# the intensity of the pulse determined
+			# by the severity of the warning
 
 	for (( i=0; i < ${#WARNING_DISK_SPACE[@]}; i++ ))
 	do
@@ -310,6 +316,9 @@ function check_ram() {
 
 	# calculate memory usage in percentages
 	free_ram=$(awk -v f=$free_mem -v t=$total_mem 'BEGIN { print (f / t * 100) }')
+
+	intensity=0	# the intensity of the pulse determined
+			# by the severity of the warning
 
 	for (( i=1; i < ${#WARNING_FREE_RAM[@]}; i++ ))
 	do
