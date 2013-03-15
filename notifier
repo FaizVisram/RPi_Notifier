@@ -314,7 +314,7 @@ function check_ram() {
 	for (( i=1; i < ${#WARNING_FREE_RAM[@]}; i++ ))
 	do
 		if (( ${free_ram/.*} < ${WARNING_FREE_RAM[i]} )); then
-			intensity=(( i + 1 ))
+			intensity=$(( i + 1 ))
 		fi
 	done
 
